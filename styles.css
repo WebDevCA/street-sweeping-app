@@ -48,6 +48,13 @@ body {
     margin-bottom: 0.5rem;
 }
 
+.bell-logo {
+    width: 64px;
+    height: 64px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    color: white;
+}
+
 .app-header h1 {
     font-size: 1.75rem;
     font-weight: 700;

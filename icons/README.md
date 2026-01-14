@@ -1,36 +1,48 @@
 # App Icons
 
-This directory contains the PWA icons for the Street Sweeping Reminder app.
+## Current Status
 
-## Icon Sizes Needed
+✅ **Placeholder icons created** (icon-192.svg and icon-512.svg)
+- Simple blue bell design
+- Works for testing
+- **Replace with your AI-generated artwork for production**
 
-The following icon sizes are referenced in `manifest.json`:
-- 72x72
-- 96x96
-- 128x128
-- 144x144
-- 152x152
-- 192x192
-- 384x384
-- 512x512
+## How to Replace with Your Custom Artwork
 
-## Creating Icons
+### Option 1: Use Your AI-Generated Image (Recommended)
 
-You can create these icons from your AI-generated artwork. Here are some options:
+1. **Prepare your image:**
+   - Start with your AI-generated street sweeping artwork
+   - Crop to a square (1:1 aspect ratio)
+   - Export as PNG with transparent background if possible
 
-### Option 1: Online Tools
-- [Favicon Generator](https://www.favicon-generator.org/) - Upload your image and generate all sizes
-- [PWA Asset Generator](https://github.com/elegantapp/pwa-asset-generator) - CLI tool
+2. **Generate all required sizes:**
 
-### Option 2: Manual Creation
-Use any image editor (Photoshop, GIMP, Figma) to export the AI art in each size.
+   **Online Tool (Easiest):**
+   - Use [PWA Asset Generator](https://www.pwabuilder.com/imageGenerator)
+   - Upload your square image
+   - Download the generated icons
 
-### Option 3: Placeholder
-For testing, you can use a simple emoji or text-based icon generator:
-- [Emoji Favicon](https://favicon.io/emoji-favicons/)
+   **Or manually create these sizes:**
+   - icon-192.png (192x192)
+   - icon-512.png (512x512)
 
-## Temporary Solution
+3. **Replace the files:**
+   - Delete `icon-192.svg` and `icon-512.svg`
+   - Add your new `icon-192.png` and `icon-512.png`
+   - Update `manifest.json` to change `type: "image/svg+xml"` to `type: "image/png"`
+   - Update file extension in `index.html` for apple-touch-icon reference
 
-Until proper icons are created, the app will work without them. Browsers will show a default icon.
+### Option 2: Extract the Bell Icon
 
-The bell emoji (🔔) from your AI art would make a great simple icon!
+If you want to use just the bell from your AI image:
+- Crop/extract the bell portion
+- Follow the same steps as Option 1
+
+## Files in This Directory
+
+- `bell.svg` - Small bell icon used in the app header
+- `icon-192.svg` - Temporary PWA icon (192x192) - **REPLACE ME**
+- `icon-512.svg` - Temporary PWA icon (512x512) - **REPLACE ME**
+
+The placeholder icons will work for testing, but replacing them with your custom artwork will make the app look much more polished!

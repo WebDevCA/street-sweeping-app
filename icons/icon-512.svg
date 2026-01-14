@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <!-- Temporary placeholder - replace with your custom AI-generated artwork -->
+    <rect width="512" height="512" fill="#2563eb" rx="86"/>
+    <g transform="translate(256, 256)">
+        <path d="M-64 -27 A 54 54 0 0 1 64 -27 C64 45 96 59 96 59 L-96 59 C-96 59 -64 45 -64 -27"
+              fill="none" stroke="white" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M-27 59 A 27 27 0 0 0 27 59"
+              fill="none" stroke="white" stroke-width="16" stroke-linecap="round"/>
+        <circle cx="0" cy="-27" r="8" fill="white"/>
+    </g>
+</svg>
