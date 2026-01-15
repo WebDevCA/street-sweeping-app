@@ -64,8 +64,8 @@
 
             <!-- Exceptions Section -->
             <section class="exceptions-section">
-                <h2>Exceptions & Holidays</h2>
-                <button class="btn-secondary" id="addExceptionBtn">+ Add Exception</button>
+                <h2>Schedule Changes & Holidays</h2>
+                <button class="btn-secondary" id="addExceptionBtn">+ Add Schedule Change</button>
                 <div id="exceptionsList" class="exceptions-list"></div>
             </section>
 
@@ -140,23 +140,30 @@
     <div id="exceptionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Add Exception</h3>
+                <h3>Add Schedule Change</h3>
                 <button class="close-btn" id="closeExceptionModal">&times;</button>
             </div>
             <form id="exceptionForm">
                 <div class="form-group">
-                    <label for="exceptionDate">Date:</label>
+                    <label for="exceptionDate">Original Date:</label>
                     <input type="date" id="exceptionDate" required>
+                    <small>The scheduled date that will be moved or cancelled</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="movedToDate">Moved To (optional):</label>
+                    <input type="date" id="movedToDate">
+                    <small>Leave empty if sweeping is cancelled (not rescheduled)</small>
                 </div>
 
                 <div class="form-group">
                     <label for="exceptionReason">Reason (optional):</label>
-                    <input type="text" id="exceptionReason" placeholder="e.g., Holiday, Cancelled">
+                    <input type="text" id="exceptionReason" placeholder="e.g., New Year's Day, Holiday">
                 </div>
 
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" id="cancelException">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Exception</button>
+                    <button type="submit" class="btn-primary">Save Change</button>
                 </div>
             </form>
         </div>

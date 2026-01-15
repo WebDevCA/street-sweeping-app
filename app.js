@@ -123,11 +123,13 @@ function handleExceptionSubmit(e) {
     e.preventDefault();
 
     const exceptionDate = document.getElementById('exceptionDate').value;
-    const exceptionReason = document.getElementById('exceptionReason').value || 'Exception';
+    const movedToDate = document.getElementById('movedToDate').value;
+    const exceptionReason = document.getElementById('exceptionReason').value || 'Schedule Change';
 
     const exception = {
         id: Date.now(),
         date: exceptionDate,
+        movedToDate: movedToDate || null,
         reason: exceptionReason
     };
 
@@ -135,6 +137,7 @@ function handleExceptionSubmit(e) {
     saveState();
     renderExceptions();
     closeModal('exceptionModal');
+    document.getElementById('exceptionForm').reset();
 }
 
 // Handle reminder settings save
@@ -180,7 +183,7 @@ function renderExceptions() {
     const exceptionsList = document.getElementById('exceptionsList');
 
     if (state.exceptions.length === 0) {
-        exceptionsList.innerHTML = '<div class="empty-state">No exceptions added</div>';
+        exceptionsList.innerHTML = '<div class="empty-state">No schedule changes added</div>';
         return;
     }
 
@@ -191,11 +194,18 @@ function renderExceptions() {
         const date = new Date(exception.date + 'T00:00:00');
         const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
+        let detailsText = dateStr;
+        if (exception.movedToDate) {
+            const movedDate = new Date(exception.movedToDate + 'T00:00:00');
+            const movedDateStr = movedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            detailsText = `${dateStr} → ${movedDateStr}`;
+        }
+
         return `
             <div class="exception-item">
                 <div class="exception-info">
                     <div class="schedule-label">${exception.reason}</div>
-                    <div class="exception-details">${dateStr}</div>
+                    <div class="exception-details">${detailsText}</div>
                 </div>
                 <button class="delete-btn" onclick="deleteException(${exception.id})">×</button>
             </div>
@@ -281,13 +291,25 @@ function getNextSweepingDate() {
     for (let i = 0; i < 90; i++) {
         const checkDate = new Date(today);
         checkDate.setDate(today.getDate() + i);
-
-        // Check if this date is an exception
         const dateStr = checkDate.toISOString().split('T')[0];
+
+        // Check if this date is a moved-to date (exception where sweeping was rescheduled TO this date)
+        const movedToThisDate = state.exceptions.find(ex => ex.movedToDate === dateStr);
+        if (movedToThisDate) {
+            // Use the first schedule's times for moved dates
+            const schedule = state.schedules.find(s => s.active);
+            if (schedule && (!closestDate || checkDate < closestDate)) {
+                closestDate = checkDate;
+                closestSchedule = schedule;
+            }
+            continue;
+        }
+
+        // Check if this date is an exception (original date that was moved or cancelled)
         const isException = state.exceptions.some(ex => ex.date === dateStr);
         if (isException) continue;
 
-        // Check each schedule
+        // Check each schedule for regular sweeping days
         for (const schedule of state.schedules) {
             if (!schedule.active) continue;
 
