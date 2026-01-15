@@ -227,13 +227,20 @@ function updateNextSweepingDisplay() {
     const nextDateLarge = document.getElementById('nextDateLarge');
     const timeInfo = document.getElementById('timeInfo');
     const countdown = document.getElementById('countdown');
+    const heroImage = document.getElementById('heroImage');
 
     if (!nextSweeping) {
-        nextDateLarge.textContent = 'No schedule set';
+        // Show hero image when no schedule
+        if (heroImage) heroImage.style.display = 'block';
+        nextDateLarge.style.display = 'none';
         timeInfo.textContent = '';
         countdown.textContent = '';
         return;
     }
+
+    // Hide hero image when schedule exists
+    if (heroImage) heroImage.style.display = 'none';
+    nextDateLarge.style.display = 'block';
 
     const { date, schedule } = nextSweeping;
     const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });

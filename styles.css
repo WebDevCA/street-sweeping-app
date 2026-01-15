@@ -93,6 +93,24 @@ body {
     text-align: center;
 }
 
+.hero-image-container {
+    margin-bottom: 1.5rem;
+}
+
+.hero-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+}
+
+.hero-text {
+    font-size: 1.1rem;
+    color: var(--text-gray);
+    font-weight: 500;
+}
+
 .date-large {
     font-size: 1.75rem;
     font-weight: 700;
