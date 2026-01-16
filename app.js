@@ -258,9 +258,11 @@ function updateNextSweepingDisplay() {
     nextDateLarge.textContent = dateStr;
     timeInfo.textContent = `${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}`;
 
-    // Calculate countdown
+    // Calculate countdown (compare calendar days, not exact timestamps)
     const now = new Date();
-    const daysUntil = Math.floor((date - now) / (1000 * 60 * 60 * 24));
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sweepingDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const daysUntil = Math.round((sweepingDay - today) / (1000 * 60 * 60 * 24));
 
     if (daysUntil === 0) {
         countdown.textContent = 'TODAY!';
