@@ -1,11 +1,12 @@
 // Service Worker for Street Sweeping Reminder App
 
-const CACHE_NAME = 'street-sweeping-v1';
+const CACHE_NAME = 'street-sweeping-v2';
 const urlsToCache = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/api-client.js',
   '/manifest.json'
 ];
 
@@ -55,17 +56,31 @@ self.addEventListener('activate', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-  const options = {
-    body: event.data ? event.data.text() : 'Time to move your car!',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-72.png',
+  let data = {
+    title: 'Street Sweeping Reminder',
+    body: 'Time to move your car!',
+    icon: '/icons/icon-192.svg',
+    badge: '/icons/bell.svg',
     vibrate: [200, 100, 200],
     tag: 'street-sweeping-reminder',
-    requireInteraction: true
+    requireInteraction: true,
+    data: { url: '/' }
   };
 
+  // Parse payload from backend
+  if (event.data) {
+    try {
+      const payload = event.data.json();
+      data = { ...data, ...payload };
+    } catch (e) {
+      console.error('Error parsing push payload:', e);
+    }
+  }
+
+  const { title, ...options } = data;
+
   event.waitUntil(
-    self.registration.showNotification('Street Sweeping Reminder', options)
+    self.registration.showNotification(title, options)
   );
 });
 
