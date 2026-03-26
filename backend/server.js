@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from parent directory (the frontend)
+app.use(express.static(path.join(__dirname, '..')));
+
 // Initialize database
 db.initializeDatabase();
 
