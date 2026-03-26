@@ -85,7 +85,7 @@ function closeModal(modalId) {
 }
 
 // Handle schedule form submission
-function handleScheduleSubmit(e) {
+async function handleScheduleSubmit(e) {
     e.preventDefault();
 
     const scheduleName = document.getElementById('scheduleName').value || 'Street Sweeping';
@@ -103,20 +103,31 @@ function handleScheduleSubmit(e) {
     }
 
     const schedule = {
-        id: Date.now(),
         name: scheduleName,
         dayOfWeek: dayOfWeek,
         weekPattern: weekPattern,
         startTime: startTime,
-        endTime: endTime,
-        active: true
+        endTime: endTime
     };
 
-    state.schedules.push(schedule);
-    saveState();
-    renderSchedules();
-    closeModal('scheduleModal');
+    try {
+        // Save to backend API
+        const result = await API.createSchedule(schedule);
+
+        // Add to local state with ID from backend
+        schedule.id = result.id;
+        schedule.active = true;
+        state.schedules.push(schedule);
+        saveState();
+        renderSchedules();
+        closeModal('scheduleModal');
+        document.getElementById('scheduleForm').reset();
+    } catch (error) {
+        console.error('Error saving schedule:', error);
+        alert('Failed to save schedule. Please try again.');
+    }
 }
+
 
 // Handle exception form submission
 function handleExceptionSubmit(e) {
@@ -141,12 +152,26 @@ function handleExceptionSubmit(e) {
 }
 
 // Handle reminder settings save
-function handleRemindersSave() {
-    state.reminders.nightBefore = document.getElementById('nightBeforeTime').value;
-    state.reminders.morningOf = document.getElementById('morningOfTime').value;
-    saveState();
-    alert('Reminder times saved!');
+async function handleRemindersSave() {
+    const nightBefore = document.getElementById('nightBeforeTime').value;
+    const morningOf = document.getElementById('morningOfTime').value;
+
+    try {
+        // Save to backend API
+        await API.updateReminders(nightBefore, morningOf);
+
+        // Save to local state
+        state.reminders.nightBefore = nightBefore;
+        state.reminders.morningOf = morningOf;
+        saveState();
+
+        alert('Reminder times saved!');
+    } catch (error) {
+        console.error('Error saving reminders:', error);
+        alert('Failed to save reminder times. Please try again.');
+    }
 }
+
 
 // Render schedules list
 function renderSchedules() {
