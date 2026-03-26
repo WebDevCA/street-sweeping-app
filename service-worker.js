@@ -59,7 +59,7 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Street Sweeping Reminder',
     body: 'Time to move your car!',
-    icon: '/icons/icon-192.svg',
+    icon: '/icons/streetSweeperAppIcon.png',
     badge: '/icons/bell.svg',
     vibrate: [200, 100, 200],
     tag: 'street-sweeping-reminder',
