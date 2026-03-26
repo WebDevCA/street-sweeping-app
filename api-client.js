@@ -3,7 +3,8 @@
 // Configuration
 const API_BASE_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:3000'
-    : 'https://your-backend-url.railway.app'; // Update this after deployment
+    : window.location.origin; // Same origin - backend serves everything
+
 
 // Get or create device ID
 function getDeviceId() {
