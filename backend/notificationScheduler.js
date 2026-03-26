@@ -142,7 +142,7 @@ async function checkAndSendNotifications() {
                         const payload = {
                             title: 'Street Sweeping Tomorrow!',
                             body: `Don't forget to move your car by ${formatTime(schedule.start_time)} tomorrow.`,
-                            icon: '/icons/icon-192.svg',
+                            icon: '/icons/streetSweeperAppIcon.png',
                             badge: '/icons/bell.svg',
                             vibrate: [200, 100, 200],
                             tag: 'street-sweeping-reminder',
@@ -183,7 +183,7 @@ async function checkAndSendNotifications() {
                         const payload = {
                             title: 'Street Sweeping Today!',
                             body: `Move your car by ${formatTime(schedule.start_time)}. Sweeping: ${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
-                            icon: '/icons/icon-192.svg',
+                            icon: '/icons/streetSweeperAppIcon.png',
                             badge: '/icons/bell.svg',
                             vibrate: [200, 100, 200],
                             tag: 'street-sweeping-reminder',
