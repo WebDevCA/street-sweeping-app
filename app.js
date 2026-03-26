@@ -356,114 +356,65 @@ function checkNotificationPermission() {
             if (confirm('Enable notifications to get reminders about street sweeping?')) {
                 Notification.requestPermission().then(permission => {
                     if (permission === 'granted') {
-                        scheduleNotifications();
+                        subscribeToPushNotifications();
                     }
                 });
             }
         }, 2000);
+    } else if (Notification.permission === 'granted') {
+        // Already have permission, subscribe to push
+        subscribeToPushNotifications();
     }
 }
 
-// Schedule notifications
-function scheduleNotifications() {
-    if (Notification.permission !== 'granted') {
-        console.log('Notification permission not granted');
-        return;
-    }
+// Subscribe to push notifications
+async function subscribeToPushNotifications() {
+    try {
+        // Check if service worker is ready
+        const registration = await navigator.serviceWorker.ready;
 
-    // Check every minute if we need to send a notification
-    setInterval(() => {
-        checkAndSendNotifications();
-    }, 60000); // Check every minute
+        // Get VAPID public key from backend
+        const { publicKey } = await API.getVapidPublicKey();
 
-    // Also check immediately
-    checkAndSendNotifications();
-}
-
-// Check if it's time to send notifications
-function checkAndSendNotifications() {
-    const nextSweeping = getNextSweepingDate();
-    if (!nextSweeping) return;
-
-    const { date, schedule } = nextSweeping;
-    const now = new Date();
-
-    // Get reminder times
-    const nightBeforeTime = state.reminders.nightBefore.split(':');
-    const morningOfTime = state.reminders.morningOf.split(':');
-
-    // Calculate when to send notifications
-    const sweepingDate = new Date(date);
-    sweepingDate.setHours(0, 0, 0, 0);
-
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-
-    const daysBefore = Math.round((sweepingDate - today) / (1000 * 60 * 60 * 24));
-
-    // Night before notification (if sweeping is tomorrow)
-    if (daysBefore === 1) {
-        const nightBeforeHour = parseInt(nightBeforeTime[0]);
-        const nightBeforeMinute = parseInt(nightBeforeTime[1]);
-
-        if (now.getHours() === nightBeforeHour && now.getMinutes() === nightBeforeMinute) {
-            const lastNotificationKey = 'lastNightBeforeNotification';
-            const lastSent = localStorage.getItem(lastNotificationKey);
-            const notificationId = `${date.toISOString()}-night`;
-
-            // Only send if we haven't sent this notification today
-            if (lastSent !== notificationId) {
-                sendNotification(
-                    'Street Sweeping Tomorrow!',
-                    `Don't forget to move your car by ${formatTime(schedule.startTime)} tomorrow.`
-                );
-                localStorage.setItem(lastNotificationKey, notificationId);
-            }
-        }
-    }
-
-    // Morning of notification (if sweeping is today)
-    if (daysBefore === 0) {
-        const morningOfHour = parseInt(morningOfTime[0]);
-        const morningOfMinute = parseInt(morningOfTime[1]);
-
-        if (now.getHours() === morningOfHour && now.getMinutes() === morningOfMinute) {
-            const lastNotificationKey = 'lastMorningOfNotification';
-            const lastSent = localStorage.getItem(lastNotificationKey);
-            const notificationId = `${date.toISOString()}-morning`;
-
-            // Only send if we haven't sent this notification today
-            if (lastSent !== notificationId) {
-                sendNotification(
-                    'Street Sweeping Today!',
-                    `Move your car by ${formatTime(schedule.startTime)}. Sweeping: ${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}`
-                );
-                localStorage.setItem(lastNotificationKey, notificationId);
-            }
-        }
-    }
-}
-
-// Send a notification
-function sendNotification(title, body) {
-    if (Notification.permission === 'granted') {
-        const notification = new Notification(title, {
-            body: body,
-            icon: 'icons/icon-192.svg',
-            badge: 'icons/bell.svg',
-            vibrate: [200, 100, 200],
-            tag: 'street-sweeping-reminder',
-            requireInteraction: true
-        });
-
-        notification.onclick = () => {
-            window.focus();
-            notification.close();
+        // Convert base64 VAPID key to Uint8Array
+        const urlBase64ToUint8Array = (base64String) => {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
         };
 
-        console.log('Notification sent:', title);
+        const applicationServerKey = urlBase64ToUint8Array(publicKey);
+
+        // Subscribe to push notifications
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+        });
+
+        // Send subscription to backend
+        await API.subscribeToPush(subscription);
+
+        console.log('Successfully subscribed to push notifications');
+    } catch (error) {
+        console.error('Failed to subscribe to push notifications:', error);
     }
 }
+
+
+// NOTE: Notifications are now handled by the backend server
+// The backend checks every minute and sends push notifications
+// No need for client-side notification scheduling
+
+// OLD: These functions are no longer used - backend handles notifications now
+// Keeping them commented out in case we need to reference the logic
+/*
+function checkAndSendNotifications() { ... }
+function sendNotification(title, body) { ... }
+*/
+
 
 // PWA Install handling
 function setupPWAInstall() {
