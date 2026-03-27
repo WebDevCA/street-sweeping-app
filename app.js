@@ -35,11 +35,10 @@ function loadState() {
     }
 }
 
-// Save state to localStorage
 function saveState() {
     localStorage.setItem('sweepingAppState', JSON.stringify(state));
     updateNextSweepingDisplay();
-    scheduleNotifications();
+    // Note: Notifications are now handled by backend server, not client-side
 }
 
 // Initialize event listeners
