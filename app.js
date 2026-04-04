@@ -1,4 +1,4 @@
-// Street Sweeping Reminder App - Main JavaScript (Updated with Push Fixes)
+// Street Sweeping Reminder App - Complete JavaScript
 
 // State Management
 let state = {
@@ -16,8 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     updateNextSweepingDisplay();
     setupPWAInstall();
-    // Start the chain: Register SW -> Then Check Permissions -> Then Subscribe
-    registerServiceWorker();
+    registerServiceWorker(); // This now starts the chain for push registration
 });
 
 // Load state from localStorage
@@ -25,10 +24,11 @@ function loadState() {
     const savedState = localStorage.getItem('sweepingAppState');
     if (savedState) {
         state = JSON.parse(savedState);
-        if (document.getElementById('nightBeforeTime')) 
-            document.getElementById('nightBeforeTime').value = state.reminders.nightBefore;
-        if (document.getElementById('morningOfTime')) 
-            document.getElementById('morningOfTime').value = state.reminders.morningOf;
+        const nightTime = document.getElementById('nightBeforeTime');
+        const morningTime = document.getElementById('morningOfTime');
+        if (nightTime) nightTime.value = state.reminders.nightBefore;
+        if (morningTime) morningTime.value = state.reminders.morningOf;
+
         renderSchedules();
         renderExceptions();
     }
@@ -78,7 +78,10 @@ async function handleScheduleSubmit(e) {
         endTime: document.getElementById('endTime').value
     };
 
-    if (schedule.weekPattern.length === 0) return alert('Please select at least one week');
+    if (schedule.weekPattern.length === 0) {
+        alert('Please select at least one week of the month');
+        return;
+    }
 
     try {
         const result = await API.createSchedule(schedule);
@@ -90,7 +93,23 @@ async function handleScheduleSubmit(e) {
         closeModal('scheduleModal');
     } catch (error) {
         console.error('Error saving schedule:', error);
+        alert('Failed to save schedule.');
     }
+}
+
+// Handle exception form submission
+function handleExceptionSubmit(e) {
+    e.preventDefault();
+    const exception = {
+        id: Date.now(),
+        date: document.getElementById('exceptionDate').value,
+        movedToDate: document.getElementById('movedToDate').value || null,
+        reason: document.getElementById('exceptionReason').value || 'Schedule Change'
+    };
+    state.exceptions.push(exception);
+    saveState();
+    renderExceptions();
+    closeModal('exceptionModal');
 }
 
 // Handle reminder settings save
@@ -104,45 +123,133 @@ async function handleRemindersSave() {
         state.reminders.morningOf = morningOf;
         saveState();
         
-        // RE-SUBSCRIBE: Ensure the backend has our latest subscription after updating settings
+        // Ensure the backend has our latest subscription after updating settings
         await subscribeToPushNotifications();
         alert('Reminder times saved and notifications synced!');
     } catch (error) {
         console.error('Error saving reminders:', error);
+        alert('Failed to save reminder times.');
     }
 }
 
-// Helper: Convert VAPID key
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+// UI Rendering Functions
+function renderSchedules() {
+    const scheduleList = document.getElementById('scheduleList');
+    if (!scheduleList) return;
+    if (state.schedules.length === 0) {
+        scheduleList.innerHTML = '<div class="empty-state">No schedules added yet</div>';
+        return;
+    }
+    scheduleList.innerHTML = state.schedules.map(schedule => {
+        const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][schedule.dayOfWeek];
+        const weeksText = schedule.weekPattern.map(w => w + (['', 'st', 'nd', 'rd', 'th', 'th'][w] || 'th')).join(', ');
+        return `
+            <div class="schedule-item">
+                <div class="schedule-info">
+                    <div class="schedule-label">${schedule.name}</div>
+                    <div class="schedule-details">${weeksText} ${dayName} • ${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}</div>
+                </div>
+                <button class="delete-btn" onclick="deleteSchedule(${schedule.id})">×</button>
+            </div>`;
+    }).join('');
 }
 
-// Register service worker
+function renderExceptions() {
+    const exceptionsList = document.getElementById('exceptionsList');
+    if (!exceptionsList) return;
+    if (state.exceptions.length === 0) {
+        exceptionsList.innerHTML = '<div class="empty-state">No schedule changes added</div>';
+        return;
+    }
+    const sorted = [...state.exceptions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    exceptionsList.innerHTML = sorted.map(ex => {
+        const d = new Date(ex.date + 'T00:00:00');
+        const dStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        let detailsText = dStr;
+        if (ex.movedToDate) {
+            const m = new Date(ex.movedToDate + 'T00:00:00');
+            detailsText = `${dStr} → ${m.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}`;
+        }
+        return `
+            <div class="exception-item">
+                <div class="exception-info">
+                    <div class="schedule-label">${ex.reason}</div>
+                    <div class="exception-details">${detailsText}</div>
+                </div>
+                <button class="delete-btn" onclick="deleteException(${ex.id})">×</button>
+            </div>`;
+    }).join('');
+}
+
+function deleteSchedule(id) { if (confirm('Delete this schedule?')) { state.schedules = state.schedules.filter(s => s.id !== id); saveState(); renderSchedules(); } }
+function deleteException(id) { if (confirm('Delete this exception?')) { state.exceptions = state.exceptions.filter(e => e.id !== id); saveState(); renderExceptions(); } }
+
+function formatTime(time24) {
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    return `${hour % 12 || 12}:${minutes} ${hour >= 12 ? 'PM' : 'AM'}`;
+}
+
+// Update display logic
+function updateNextSweepingDisplay() {
+    const nextSweeping = getNextSweepingDate();
+    const nextDateLarge = document.getElementById('nextDateLarge');
+    const timeInfo = document.getElementById('timeInfo');
+    const countdown = document.getElementById('countdown');
+    if (!nextDateLarge || !nextSweeping) return;
+
+    const { date, schedule } = nextSweeping;
+    nextDateLarge.textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    timeInfo.textContent = `${formatTime(schedule.startTime)} - ${formatTime(schedule.endTime)}`;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sweepingDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const daysUntil = Math.round((sweepingDay - today) / (1000 * 60 * 60 * 24));
+
+    countdown.textContent = daysUntil === 0 ? 'TODAY!' : daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`;
+    countdown.className = daysUntil <= 1 ? 'urgent' : '';
+}
+
+function getNextSweepingDate() {
+    if (state.schedules.length === 0) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 90; i++) {
+        const checkDate = new Date(today);
+        checkDate.setDate(today.getDate() + i);
+        const dateStr = checkDate.toISOString().split('T')[0];
+        const movedTo = state.exceptions.find(ex => ex.movedToDate === dateStr);
+        if (movedTo) return { date: checkDate, schedule: state.schedules.find(s => s.active) };
+        if (state.exceptions.some(ex => ex.date === dateStr)) continue;
+        for (const schedule of state.schedules) {
+            if (schedule.active && checkDate.getDay() === schedule.dayOfWeek) {
+                const weekOfMonth = Math.ceil(checkDate.getDate() / 7);
+                if (schedule.weekPattern.includes(weekOfMonth)) return { date: checkDate, schedule };
+            }
+        }
+    }
+    return null;
+}
+
+// --- PUSH NOTIFICATION LOGIC ---
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/service-worker.js')
-            .then(registration => {
-                console.log('Service Worker registered');
-                // Only check for notifications once we know the SW is alive
+            .then(reg => {
+                console.log('SW Registered');
                 checkNotificationPermission();
             })
-            .catch(error => console.log('Service Worker registration failed:', error));
+            .catch(err => console.log('SW Registration failed', err));
     }
 }
 
-// Check notification permission
 function checkNotificationPermission() {
     if (!('Notification' in window)) return;
-
     if (Notification.permission === 'default') {
         setTimeout(() => {
-            if (confirm('Enable notifications for street sweeping reminders?')) {
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') subscribeToPushNotifications();
-                });
+            if (confirm('Enable notifications?')) {
+                Notification.requestPermission().then(p => { if (p === 'granted') subscribeToPushNotifications(); });
             }
         }, 2000);
     } else if (Notification.permission === 'granted') {
@@ -150,73 +257,30 @@ function checkNotificationPermission() {
     }
 }
 
-// THE FIX: Subscribe to push notifications
 async function subscribeToPushNotifications() {
     try {
-        const registration = await navigator.serviceWorker.ready;
-        
-        // 1. Clean the VAPID Key
+        const reg = await navigator.serviceWorker.ready;
         const response = await API.getVapidPublicKey();
         let publicKey = typeof response === 'object' ? response.publicKey : response;
-        
-        // Strip out literal quotes that might be coming from the backend string
-        publicKey = publicKey.replace(/[\\"]/g, '').trim();
-        console.log('Using Cleaned VAPID Key:', publicKey);
+        publicKey = publicKey.replace(/[\\"]/g, '').trim(); // SCRUB QUOTES
 
-        const applicationServerKey = urlBase64ToUint8Array(publicKey);
-
-        // 2. Subscribe
-        const subscription = await registration.pushManager.subscribe({
+        const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: applicationServerKey
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
         });
 
-        console.log('Push Endpoint Generated:', subscription.endpoint);
-
-        // 3. Send to backend
-        await API.subscribeToPush(subscription);
-        console.log('Successfully synced subscription with backend');
-    } catch (error) {
-        console.error('Push Subscription Process Failed:', error);
+        console.log('Push Endpoint:', sub.endpoint);
+        await API.subscribeToPush(sub);
+    } catch (err) {
+        console.error('Push Subscription Failed', err);
     }
 }
 
-// UI Rendering Functions
-function renderSchedules() {
-    const list = document.getElementById('scheduleList');
-    if (state.schedules.length === 0) {
-        list.innerHTML = '<div class="empty-state">No schedules added yet</div>';
-        return;
-    }
-    list.innerHTML = state.schedules.map(s => {
-        const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][s.dayOfWeek];
-        const weeks = s.weekPattern.map(w => w + (['th', 'st', 'nd', 'rd', 'th', 'th'][w] || 'th')).join(', ');
-        return `
-            <div class="schedule-item">
-                <div class="schedule-info">
-                    <div class="schedule-label">${s.name}</div>
-                    <div class="schedule-details">${weeks} ${day} • ${formatTime(s.startTime)} - ${formatTime(s.endTime)}</div>
-                </div>
-                <button class="delete-btn" onclick="deleteSchedule(${s.id})">×</button>
-            </div>`;
-    }).join('');
-}
-
-function renderExceptions() { /* ... Same as your original code ... */ }
-function deleteSchedule(id) { if (confirm('Delete?')) { state.schedules = state.schedules.filter(s => s.id !== id); saveState(); renderSchedules(); } }
-function formatTime(t) { 
-    const [h, m] = t.split(':'); 
-    const hr = parseInt(h);
-    return `${hr % 12 || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`; 
-}
-
-// Update display logic (simplified for brevity)
-function updateNextSweepingDisplay() {
-    // ... logic from your original code ...
-}
-
-function getNextSweepingDate() {
-    // ... logic from your original code ...
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
 }
 
 function setupPWAInstall() {
@@ -224,13 +288,15 @@ function setupPWAInstall() {
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        if (document.getElementById('installSection')) document.getElementById('installSection').style.display = 'block';
+        const sect = document.getElementById('installSection');
+        if (sect) sect.style.display = 'block';
     });
     document.getElementById('installBtn')?.addEventListener('click', async () => {
         if (deferredPrompt) {
             deferredPrompt.prompt();
             deferredPrompt = null;
-            if (document.getElementById('installSection')) document.getElementById('installSection').style.display = 'none';
+            const sect = document.getElementById('installSection');
+            if (sect) sect.style.display = 'none';
         }
     });
 }
