@@ -81,14 +81,17 @@ async function loadDataFromBackend() {
             }));
         }
 
-        // Load reminders
+        // Load reminders (backend stores UTC, convert to local)
         const reminders = await API.getReminders();
         if (reminders && reminders.nightBefore && reminders.morningOf) {
-            state.reminders = reminders;
+            // Convert UTC times to local times for display
+            state.reminders.nightBefore = convertUTCTimeToLocal(reminders.nightBefore);
+            state.reminders.morningOf = convertUTCTimeToLocal(reminders.morningOf);
+
             const nightTime = document.getElementById('nightBeforeTime');
             const morningTime = document.getElementById('morningOfTime');
-            if (nightTime) nightTime.value = reminders.nightBefore;
-            if (morningTime) morningTime.value = reminders.morningOf;
+            if (nightTime) nightTime.value = state.reminders.nightBefore;
+            if (morningTime) morningTime.value = state.reminders.morningOf;
         }
 
         // Save merged state to localStorage
@@ -181,17 +184,43 @@ async function handleExceptionSubmit(e) {
     }
 }
 
+// Convert local time (HH:MM) to UTC time (HH:MM)
+function convertLocalTimeToUTC(localTime) {
+    const [hours, minutes] = localTime.split(':').map(Number);
+    const now = new Date();
+    const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+    const utcHours = localDate.getUTCHours().toString().padStart(2, '0');
+    const utcMinutes = localDate.getUTCMinutes().toString().padStart(2, '0');
+    return `${utcHours}:${utcMinutes}`;
+}
+
+// Convert UTC time (HH:MM) to local time (HH:MM)
+function convertUTCTimeToLocal(utcTime) {
+    const [hours, minutes] = utcTime.split(':').map(Number);
+    const now = new Date();
+    const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hours, minutes));
+    const localHours = utcDate.getHours().toString().padStart(2, '0');
+    const localMinutes = utcDate.getMinutes().toString().padStart(2, '0');
+    return `${localHours}:${localMinutes}`;
+}
+
 // Handle reminder settings save
 async function handleRemindersSave() {
     const nightBefore = document.getElementById('nightBeforeTime').value;
     const morningOf = document.getElementById('morningOfTime').value;
 
     try {
-        await API.updateReminders(nightBefore, morningOf);
+        // Convert to UTC before sending to backend
+        const nightBeforeUTC = convertLocalTimeToUTC(nightBefore);
+        const morningOfUTC = convertLocalTimeToUTC(morningOf);
+
+        await API.updateReminders(nightBeforeUTC, morningOfUTC);
+
+        // Store local times in state for display
         state.reminders.nightBefore = nightBefore;
         state.reminders.morningOf = morningOf;
         saveState();
-        
+
         // Ensure the backend has our latest subscription after updating settings
         await subscribeToPushNotifications();
         alert('Reminder times saved and notifications synced!');
