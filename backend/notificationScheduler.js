@@ -20,9 +20,9 @@ function initializeWebPush() {
 }
 
 // Calculate next sweeping date for a user
-function getNextSweepingDate(userId) {
-    const schedules = db.getSchedules(userId);
-    const exceptions = db.getExceptions(userId);
+async function getNextSweepingDate(userId) {
+    const schedules = await db.getSchedules(userId);
+    const exceptions = await db.getExceptions(userId);
 
     if (schedules.length === 0) return null;
 
@@ -106,7 +106,7 @@ function formatTime(time24) {
 
 // Check and send notifications for all users
 async function checkAndSendNotifications() {
-    const users = db.getAllUsers();
+    const users = await db.getAllUsers();
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
@@ -116,14 +116,14 @@ async function checkAndSendNotifications() {
 
     for (const user of users) {
         try {
-            const nextSweeping = getNextSweepingDate(user.id);
+            const nextSweeping = await getNextSweepingDate(user.id);
             if (!nextSweeping) {
                 console.log(`User ${user.id}: No upcoming sweeping found`);
                 continue;
             }
 
             const { date, schedule } = nextSweeping;
-            const reminders = db.getReminders(user.id);
+            const reminders = await db.getReminders(user.id);
 
             console.log(`User ${user.id}: Next sweeping ${date.toISOString().split('T')[0]}, Reminders: night=${reminders.night_before}, morning=${reminders.morning_of}`);
 
@@ -146,8 +146,8 @@ async function checkAndSendNotifications() {
 
                 if (currentHour === nightHour && currentMinute === nightMinute) {
                     // Check if we already sent this notification
-                    if (!db.wasNotificationSent(user.id, 'night_before', dateStr)) {
-                        const subscriptions = db.getPushSubscriptions(user.id);
+                    if (!(await db.wasNotificationSent(user.id, 'night_before', dateStr))) {
+                        const subscriptions = await db.getPushSubscriptions(user.id);
 
                         const payload = {
                             title: 'Street Sweeping Tomorrow!',
@@ -175,7 +175,7 @@ async function checkAndSendNotifications() {
                             await sendPushNotification(subscription, payload);
                         }
 
-                        db.logNotification(user.id, 'night_before', dateStr);
+                        await db.logNotification(user.id, 'night_before', dateStr);
                         console.log(`Sent night-before notification to user ${user.id}`);
                     }
                 }
@@ -187,8 +187,8 @@ async function checkAndSendNotifications() {
 
                 if (currentHour === morningHour && currentMinute === morningMinute) {
                     // Check if we already sent this notification
-                    if (!db.wasNotificationSent(user.id, 'morning_of', dateStr)) {
-                        const subscriptions = db.getPushSubscriptions(user.id);
+                    if (!(await db.wasNotificationSent(user.id, 'morning_of', dateStr))) {
+                        const subscriptions = await db.getPushSubscriptions(user.id);
 
                         const payload = {
                             title: 'Street Sweeping Today!',
@@ -216,7 +216,7 @@ async function checkAndSendNotifications() {
                             await sendPushNotification(subscription, payload);
                         }
 
-                        db.logNotification(user.id, 'morning_of', dateStr);
+                        await db.logNotification(user.id, 'morning_of', dateStr);
                         console.log(`Sent morning-of notification to user ${user.id}`);
                     }
                 }
