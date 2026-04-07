@@ -82,7 +82,7 @@ app.post('/api/schedules', getUserMiddleware, (req, res) => {
     try {
         const schedule = req.body;
 
-        if (!schedule.dayOfWeek || !schedule.weekPattern || !schedule.startTime || !schedule.endTime) {
+        if (schedule.dayOfWeek == null || !schedule.weekPattern || !schedule.startTime || !schedule.endTime) {
             return res.status(400).json({ error: 'Missing required schedule fields' });
         }
 
