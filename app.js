@@ -56,16 +56,29 @@ function saveState() {
 // Load data from backend
 async function loadDataFromBackend() {
     try {
-        // Load schedules
+        // Load schedules and map field names from snake_case to camelCase
         const schedules = await API.getSchedules();
         if (schedules && schedules.length > 0) {
-            state.schedules = schedules;
+            state.schedules = schedules.map(s => ({
+                id: s.id,
+                name: s.label || 'Street Sweeping',
+                dayOfWeek: s.day_of_week,
+                weekPattern: JSON.parse(s.week_pattern),
+                startTime: s.start_time,
+                endTime: s.end_time,
+                active: s.active === 1
+            }));
         }
 
-        // Load exceptions
+        // Load exceptions and map field names
         const exceptions = await API.getExceptions();
         if (exceptions && exceptions.length > 0) {
-            state.exceptions = exceptions;
+            state.exceptions = exceptions.map(e => ({
+                id: e.id,
+                date: e.date,
+                movedToDate: e.moved_to_date,
+                reason: e.reason
+            }));
         }
 
         // Load reminders
