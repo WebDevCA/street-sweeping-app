@@ -112,14 +112,20 @@ async function checkAndSendNotifications() {
     const currentMinute = now.getMinutes();
 
     console.log(`Checking notifications at ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
+    console.log(`Found ${users.length} users to check`);
 
     for (const user of users) {
         try {
             const nextSweeping = getNextSweepingDate(user.id);
-            if (!nextSweeping) continue;
+            if (!nextSweeping) {
+                console.log(`User ${user.id}: No upcoming sweeping found`);
+                continue;
+            }
 
             const { date, schedule } = nextSweeping;
             const reminders = db.getReminders(user.id);
+
+            console.log(`User ${user.id}: Next sweeping ${date.toISOString().split('T')[0]}, Reminders: night=${reminders.night_before}, morning=${reminders.morning_of}`);
 
             // Calculate days until sweeping
             const sweepingDate = new Date(date);
@@ -130,9 +136,13 @@ async function checkAndSendNotifications() {
 
             const dateStr = date.toISOString().split('T')[0];
 
+            console.log(`User ${user.id}: daysBefore=${daysBefore}, currentTime=${currentHour}:${currentMinute}`);
+
             // Night before notification (if sweeping is tomorrow)
             if (daysBefore === 1) {
                 const [nightHour, nightMinute] = reminders.night_before.split(':').map(Number);
+
+                console.log(`User ${user.id}: Checking night-before: need ${nightHour}:${nightMinute}, have ${currentHour}:${currentMinute}`);
 
                 if (currentHour === nightHour && currentMinute === nightMinute) {
                     // Check if we already sent this notification
