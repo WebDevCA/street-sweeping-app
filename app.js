@@ -11,8 +11,9 @@ let state = {
 };
 
 // Initialize app
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     loadState();
+    await loadDataFromBackend();
     initEventListeners();
     updateNextSweepingDisplay();
     setupPWAInstall();
@@ -23,20 +24,68 @@ document.addEventListener('DOMContentLoaded', () => {
 function loadState() {
     const savedState = localStorage.getItem('sweepingAppState');
     if (savedState) {
-        state = JSON.parse(savedState);
-        const nightTime = document.getElementById('nightBeforeTime');
-        const morningTime = document.getElementById('morningOfTime');
-        if (nightTime) nightTime.value = state.reminders.nightBefore;
-        if (morningTime) morningTime.value = state.reminders.morningOf;
-
-        renderSchedules();
-        renderExceptions();
+        try {
+            const parsed = JSON.parse(savedState);
+            // Only use parsed state if it's a valid object with required properties
+            if (parsed && typeof parsed === 'object' && parsed.reminders) {
+                state = parsed;
+            } else {
+                // Clear invalid state from localStorage
+                localStorage.removeItem('sweepingAppState');
+            }
+        } catch (e) {
+            // If parsing fails, clear invalid state
+            localStorage.removeItem('sweepingAppState');
+        }
     }
+
+    const nightTime = document.getElementById('nightBeforeTime');
+    const morningTime = document.getElementById('morningOfTime');
+    if (nightTime) nightTime.value = state.reminders.nightBefore;
+    if (morningTime) morningTime.value = state.reminders.morningOf;
+
+    renderSchedules();
+    renderExceptions();
 }
 
 function saveState() {
     localStorage.setItem('sweepingAppState', JSON.stringify(state));
     updateNextSweepingDisplay();
+}
+
+// Load data from backend
+async function loadDataFromBackend() {
+    try {
+        // Load schedules
+        const schedules = await API.getSchedules();
+        if (schedules && schedules.length > 0) {
+            state.schedules = schedules;
+        }
+
+        // Load exceptions
+        const exceptions = await API.getExceptions();
+        if (exceptions && exceptions.length > 0) {
+            state.exceptions = exceptions;
+        }
+
+        // Load reminders
+        const reminders = await API.getReminders();
+        if (reminders && reminders.nightBefore && reminders.morningOf) {
+            state.reminders = reminders;
+            const nightTime = document.getElementById('nightBeforeTime');
+            const morningTime = document.getElementById('morningOfTime');
+            if (nightTime) nightTime.value = reminders.nightBefore;
+            if (morningTime) morningTime.value = reminders.morningOf;
+        }
+
+        // Save merged state to localStorage
+        saveState();
+        renderSchedules();
+        renderExceptions();
+    } catch (error) {
+        console.error('Error loading data from backend:', error);
+        // Don't show alert - app will work with localStorage data
+    }
 }
 
 // Initialize event listeners
@@ -98,18 +147,25 @@ async function handleScheduleSubmit(e) {
 }
 
 // Handle exception form submission
-function handleExceptionSubmit(e) {
+async function handleExceptionSubmit(e) {
     e.preventDefault();
     const exception = {
-        id: Date.now(),
         date: document.getElementById('exceptionDate').value,
         movedToDate: document.getElementById('movedToDate').value || null,
         reason: document.getElementById('exceptionReason').value || 'Schedule Change'
     };
-    state.exceptions.push(exception);
-    saveState();
-    renderExceptions();
-    closeModal('exceptionModal');
+
+    try {
+        const result = await API.createException(exception);
+        exception.id = result.id;
+        state.exceptions.push(exception);
+        saveState();
+        renderExceptions();
+        closeModal('exceptionModal');
+    } catch (error) {
+        console.error('Error saving exception:', error);
+        alert('Failed to save schedule change.');
+    }
 }
 
 // Handle reminder settings save
@@ -181,8 +237,33 @@ function renderExceptions() {
     }).join('');
 }
 
-function deleteSchedule(id) { if (confirm('Delete this schedule?')) { state.schedules = state.schedules.filter(s => s.id !== id); saveState(); renderSchedules(); } }
-function deleteException(id) { if (confirm('Delete this exception?')) { state.exceptions = state.exceptions.filter(e => e.id !== id); saveState(); renderExceptions(); } }
+async function deleteSchedule(id) {
+    if (confirm('Delete this schedule?')) {
+        try {
+            await API.deleteSchedule(id);
+            state.schedules = state.schedules.filter(s => s.id !== id);
+            saveState();
+            renderSchedules();
+        } catch (error) {
+            console.error('Error deleting schedule:', error);
+            alert('Failed to delete schedule.');
+        }
+    }
+}
+
+async function deleteException(id) {
+    if (confirm('Delete this exception?')) {
+        try {
+            await API.deleteException(id);
+            state.exceptions = state.exceptions.filter(e => e.id !== id);
+            saveState();
+            renderExceptions();
+        } catch (error) {
+            console.error('Error deleting exception:', error);
+            alert('Failed to delete exception.');
+        }
+    }
+}
 
 function formatTime(time24) {
     const [hours, minutes] = time24.split(':');

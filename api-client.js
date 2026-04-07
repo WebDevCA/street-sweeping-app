@@ -114,3 +114,6 @@ const API = {
     updateReminders,
     getDeviceId
 };
+
+// Make API globally accessible
+window.API = API;
