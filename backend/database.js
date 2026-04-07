@@ -135,7 +135,7 @@ function createSchedule(userId, schedule) {
         JSON.stringify(schedule.weekPattern),
         schedule.startTime,
         schedule.endTime,
-        schedule.active ? 1 : 0
+        schedule.active !== undefined ? (schedule.active ? 1 : 0) : 1
     );
 }
 
