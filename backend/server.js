@@ -15,9 +15,6 @@ app.use(express.json());
 // Serve static files from parent directory (the frontend)
 app.use(express.static(path.join(__dirname, '..')));
 
-// Initialize database
-db.initializeDatabase();
-
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -29,19 +26,24 @@ app.get('/api/vapid-public-key', (req, res) => {
 });
 
 // Middleware to get or create user from device ID
-function getUserMiddleware(req, res, next) {
+async function getUserMiddleware(req, res, next) {
     const deviceId = req.headers['x-device-id'];
 
     if (!deviceId) {
         return res.status(400).json({ error: 'Device ID required in X-Device-ID header' });
     }
 
-    req.user = db.getOrCreateUser(deviceId);
-    next();
+    try {
+        req.user = await db.getOrCreateUser(deviceId);
+        next();
+    } catch (error) {
+        console.error('Error getting user:', error);
+        res.status(500).json({ error: 'Failed to get user' });
+    }
 }
 
 // Subscribe to push notifications
-app.post('/api/subscribe', getUserMiddleware, (req, res) => {
+app.post('/api/subscribe', getUserMiddleware, async (req, res) => {
     try {
         const subscription = req.body;
 
@@ -49,7 +51,7 @@ app.post('/api/subscribe', getUserMiddleware, (req, res) => {
             return res.status(400).json({ error: 'Invalid subscription object' });
         }
 
-        db.savePushSubscription(req.user.id, subscription);
+        await db.savePushSubscription(req.user.id, subscription);
 
         res.json({ success: true, message: 'Subscription saved' });
     } catch (error) {
@@ -59,9 +61,9 @@ app.post('/api/subscribe', getUserMiddleware, (req, res) => {
 });
 
 // Get all schedules for user
-app.get('/api/schedules', getUserMiddleware, (req, res) => {
+app.get('/api/schedules', getUserMiddleware, async (req, res) => {
     try {
-        const schedules = db.getSchedules(req.user.id);
+        const schedules = await db.getSchedules(req.user.id);
 
         // Parse week_pattern from JSON string
         const parsedSchedules = schedules.map(s => ({
@@ -78,7 +80,7 @@ app.get('/api/schedules', getUserMiddleware, (req, res) => {
 });
 
 // Create new schedule
-app.post('/api/schedules', getUserMiddleware, (req, res) => {
+app.post('/api/schedules', getUserMiddleware, async (req, res) => {
     try {
         const schedule = req.body;
 
@@ -86,9 +88,9 @@ app.post('/api/schedules', getUserMiddleware, (req, res) => {
             return res.status(400).json({ error: 'Missing required schedule fields' });
         }
 
-        const result = db.createSchedule(req.user.id, schedule);
+        const result = await db.createSchedule(req.user.id, schedule);
 
-        res.json({ success: true, id: result.lastInsertRowid });
+        res.json({ success: true, id: result.id });
     } catch (error) {
         console.error('Error creating schedule:', error);
         res.status(500).json({ error: 'Failed to create schedule' });
@@ -96,10 +98,10 @@ app.post('/api/schedules', getUserMiddleware, (req, res) => {
 });
 
 // Delete schedule
-app.delete('/api/schedules/:id', getUserMiddleware, (req, res) => {
+app.delete('/api/schedules/:id', getUserMiddleware, async (req, res) => {
     try {
         const scheduleId = req.params.id;
-        db.deleteSchedule(req.user.id, scheduleId);
+        await db.deleteSchedule(req.user.id, scheduleId);
 
         res.json({ success: true });
     } catch (error) {
@@ -109,9 +111,9 @@ app.delete('/api/schedules/:id', getUserMiddleware, (req, res) => {
 });
 
 // Get all exceptions for user
-app.get('/api/exceptions', getUserMiddleware, (req, res) => {
+app.get('/api/exceptions', getUserMiddleware, async (req, res) => {
     try {
-        const exceptions = db.getExceptions(req.user.id);
+        const exceptions = await db.getExceptions(req.user.id);
         res.json(exceptions);
     } catch (error) {
         console.error('Error getting exceptions:', error);
@@ -120,7 +122,7 @@ app.get('/api/exceptions', getUserMiddleware, (req, res) => {
 });
 
 // Create new exception
-app.post('/api/exceptions', getUserMiddleware, (req, res) => {
+app.post('/api/exceptions', getUserMiddleware, async (req, res) => {
     try {
         const exception = req.body;
 
@@ -128,9 +130,9 @@ app.post('/api/exceptions', getUserMiddleware, (req, res) => {
             return res.status(400).json({ error: 'Date is required' });
         }
 
-        const result = db.createException(req.user.id, exception);
+        const result = await db.createException(req.user.id, exception);
 
-        res.json({ success: true, id: result.lastInsertRowid });
+        res.json({ success: true, id: result.id });
     } catch (error) {
         console.error('Error creating exception:', error);
         res.status(500).json({ error: 'Failed to create exception' });
@@ -138,10 +140,10 @@ app.post('/api/exceptions', getUserMiddleware, (req, res) => {
 });
 
 // Delete exception
-app.delete('/api/exceptions/:id', getUserMiddleware, (req, res) => {
+app.delete('/api/exceptions/:id', getUserMiddleware, async (req, res) => {
     try {
         const exceptionId = req.params.id;
-        db.deleteException(req.user.id, exceptionId);
+        await db.deleteException(req.user.id, exceptionId);
 
         res.json({ success: true });
     } catch (error) {
@@ -151,9 +153,9 @@ app.delete('/api/exceptions/:id', getUserMiddleware, (req, res) => {
 });
 
 // Get reminders for user
-app.get('/api/reminders', getUserMiddleware, (req, res) => {
+app.get('/api/reminders', getUserMiddleware, async (req, res) => {
     try {
-        const reminders = db.getReminders(req.user.id);
+        const reminders = await db.getReminders(req.user.id);
         res.json({
             nightBefore: reminders.night_before,
             morningOf: reminders.morning_of
@@ -165,7 +167,7 @@ app.get('/api/reminders', getUserMiddleware, (req, res) => {
 });
 
 // Update reminders for user
-app.put('/api/reminders', getUserMiddleware, (req, res) => {
+app.put('/api/reminders', getUserMiddleware, async (req, res) => {
     try {
         const { nightBefore, morningOf } = req.body;
 
@@ -173,7 +175,7 @@ app.put('/api/reminders', getUserMiddleware, (req, res) => {
             return res.status(400).json({ error: 'Both reminder times are required' });
         }
 
-        db.updateReminders(req.user.id, nightBefore, morningOf);
+        await db.updateReminders(req.user.id, nightBefore, morningOf);
 
         res.json({ success: true });
     } catch (error) {
@@ -189,10 +191,24 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
+async function startServer() {
+    try {
+        // Initialize database
+        await db.initializeDatabase();
+        console.log('Database initialized successfully');
 
-    // Start notification scheduler
-    startScheduler();
-});
+        // Start Express server
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+            console.log(`Health check: http://localhost:${PORT}/health`);
+
+            // Start notification scheduler
+            startScheduler();
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
+        process.exit(1);
+    }
+}
+
+startServer();
