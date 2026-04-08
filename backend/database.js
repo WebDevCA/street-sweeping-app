@@ -134,6 +134,10 @@ async function getPushSubscriptions(userId) {
     return result.rows;
 }
 
+async function deletePushSubscription(endpoint) {
+    await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+}
+
 // Schedule methods
 async function getSchedules(userId) {
     const result = await pool.query('SELECT * FROM schedules WHERE user_id = $1 ORDER BY id', [userId]);
@@ -234,6 +238,7 @@ module.exports = {
     getOrCreateUser,
     savePushSubscription,
     getPushSubscriptions,
+    deletePushSubscription,
     getSchedules,
     createSchedule,
     deleteSchedule,
