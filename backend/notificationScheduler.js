@@ -89,8 +89,10 @@ async function sendPushNotification(subscription, payload) {
         console.error('Error sending push notification:', error);
         // If subscription is invalid (410), you might want to remove it from database
         if (error.statusCode === 410) {
-            console.log('Subscription expired, should be removed from database');
+            console.log('Subscription expired, removing from database:', subscription.endpoint);
+            await db.deletePushSubscription(subscription.endpoint);
         }
+
         return false;
     }
 }
@@ -153,7 +155,6 @@ async function checkAndSendNotifications() {
                             title: 'Street Sweeping Tomorrow!',
                             body: `Don't forget to move your car by ${formatTime(schedule.start_time)} tomorrow.`,
                             icon: '/icons/streetSweeperAppIcon.png',
-                            badge: '/icons/bell.svg',
                             vibrate: [200, 100, 200],
                             tag: 'street-sweeping-reminder',
                             requireInteraction: true,
@@ -194,7 +195,6 @@ async function checkAndSendNotifications() {
                             title: 'Street Sweeping Today!',
                             body: `Move your car by ${formatTime(schedule.start_time)}. Sweeping: ${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
                             icon: '/icons/streetSweeperAppIcon.png',
-                            badge: '/icons/bell.svg',
                             vibrate: [200, 100, 200],
                             tag: 'street-sweeping-reminder',
                             requireInteraction: true,
