@@ -110,10 +110,11 @@ function formatTime(time24) {
 async function checkAndSendNotifications() {
     const users = await db.getAllUsers();
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
 
-    console.log(`Checking notifications at ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
+    console.log(`Checking notifications at ${currentHour}:${currentMinute.toString().padStart(2, '0')} UTC`);
+
     console.log(`Found ${users.length} users to check`);
 
     for (const user of users) {
