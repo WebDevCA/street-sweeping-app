@@ -169,13 +169,13 @@ app.get('/api/reminders', getUserMiddleware, async (req, res) => {
 // Update reminders for user
 app.put('/api/reminders', getUserMiddleware, async (req, res) => {
     try {
-        const { nightBefore, morningOf } = req.body;
+        const { nightBefore, morningOf, timezone } = req.body;
 
         if (!nightBefore || !morningOf) {
             return res.status(400).json({ error: 'Both reminder times are required' });
         }
 
-        await db.updateReminders(req.user.id, nightBefore, morningOf);
+        await db.updateReminders(req.user.id, nightBefore, morningOf, timezone);
 
         res.json({ success: true });
     } catch (error) {
