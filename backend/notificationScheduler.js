@@ -135,12 +135,13 @@ async function checkAndSendNotifications() {
 
             console.log(`User ${user.id}: Next sweeping ${date.toISOString().split('T')[0]}, Reminders: night=${reminders.night_before}, morning=${reminders.morning_of}`);
 
-            // Calculate days until sweeping
-            const sweepingDate = new Date(date);
-            sweepingDate.setHours(0, 0, 0, 0);
-            const today = new Date(now);
-            today.setHours(0, 0, 0, 0);
-            const daysBefore = Math.round((sweepingDate - today) / (1000 * 60 * 60 * 24));
+            // Calculate days until sweeping using the user's local timezone
+            const userTimezone = reminders.timezone || 'UTC';
+            const todayStr = getLocalDateStr(userTimezone);
+            const sweepingStr = date.toISOString().split('T')[0];
+            const todayMs = new Date(todayStr + 'T00:00:00.000Z').getTime();
+            const sweepingMs = new Date(sweepingStr + 'T00:00:00.000Z').getTime();
+            const daysBefore = Math.round((sweepingMs - todayMs) / (1000 * 60 * 60 * 24));
 
             const dateStr = date.toISOString().split('T')[0];
 
