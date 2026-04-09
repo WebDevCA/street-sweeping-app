@@ -93,10 +93,10 @@ async function getReminders() {
     return apiRequest('/api/reminders');
 }
 
-async function updateReminders(nightBefore, morningOf) {
+async function updateReminders(nightBefore, morningOf, timezone) {
     return apiRequest('/api/reminders', {
         method: 'PUT',
-        body: JSON.stringify({ nightBefore, morningOf })
+        body: JSON.stringify({ nightBefore, morningOf, timezone })
     });
 }
 
