@@ -213,8 +213,9 @@ async function handleRemindersSave() {
         // Convert to UTC before sending to backend
         const nightBeforeUTC = convertLocalTimeToUTC(nightBefore);
         const morningOfUTC = convertLocalTimeToUTC(morningOf);
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-        await API.updateReminders(nightBeforeUTC, morningOfUTC);
+        await API.updateReminders(nightBeforeUTC, morningOfUTC, timezone);
 
         // Store local times in state for display
         state.reminders.nightBefore = nightBefore;
