@@ -97,6 +97,11 @@ async function sendPushNotification(subscription, payload) {
     }
 }
 
+// Get the current calendar date (YYYY-MM-DD) in the user's local timezone
+function getLocalDateStr(timezone) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
+}
+
 // Format time for display
 function formatTime(time24) {
     const [hours, minutes] = time24.split(':');
