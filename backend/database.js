@@ -69,10 +69,16 @@ async function initializeDatabase() {
                 user_id INTEGER NOT NULL UNIQUE,
                 night_before TEXT DEFAULT '20:00',
                 morning_of TEXT DEFAULT '07:00',
+                timezone TEXT DEFAULT 'UTC',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
+        `);
+        
+        // Add timezone column to existing reminders tables that predate this column
+        await client.query(`
+            ALTER TABLE reminders ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC'
         `);
 
         // Notification log
@@ -198,15 +204,16 @@ async function getReminders(userId) {
     return result.rows[0];
 }
 
-async function updateReminders(userId, nightBefore, morningOf) {
+async function updateReminders(userId, nightBefore, morningOf, timezone) {
     await pool.query(`
-        INSERT INTO reminders (user_id, night_before, morning_of, updated_at)
-        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        INSERT INTO reminders (user_id, night_before, morning_of, timezone, updated_at)
+        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
         ON CONFLICT (user_id) DO UPDATE SET
             night_before = EXCLUDED.night_before,
             morning_of = EXCLUDED.morning_of,
+            timezone = EXCLUDED.timezone,
             updated_at = CURRENT_TIMESTAMP
-    `, [userId, nightBefore, morningOf]);
+    `, [userId, nightBefore, morningOf, timezone || 'UTC']);
 }
 
 // Notification log methods
