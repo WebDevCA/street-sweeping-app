@@ -19,64 +19,147 @@ function initializeWebPush() {
     return true;
 }
 
-// Calculate next sweeping date for a user
-async function getNextSweepingDate(userId) {
+// ---- Timezone-aware date/time helpers ----
+
+// Get the {year, month, day} for a given instant in a specific timezone.
+function getLocalDateParts(timezone, baseDate = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(baseDate);
+    return {
+        year: parseInt(parts.find(p => p.type === 'year').value, 10),
+        month: parseInt(parts.find(p => p.type === 'month').value, 10),
+        day: parseInt(parts.find(p => p.type === 'day').value, 10),
+    };
+}
+
+// Get the {hour, minute} for a given instant in a specific timezone.
+function getLocalTimeParts(timezone, baseDate = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).formatToParts(baseDate);
+    return {
+        hour: parseInt(parts.find(p => p.type === 'hour').value, 10),
+        minute: parseInt(parts.find(p => p.type === 'minute').value, 10),
+    };
+}
+
+// Format {year, month, day} as 'YYYY-MM-DD'.
+function formatDateParts({ year, month, day }) {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Parse 'YYYY-MM-DD' to {year, month, day}, or null if invalid.
+function parseDateStr(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m ? { year: +m[1], month: +m[2], day: +m[3] } : null;
+}
+
+// Day of week (0=Sunday..6=Saturday) for a {year, month, day}.
+// Uses UTC arithmetic so the server's timezone can't influence the result.
+function getDayOfWeek({ year, month, day }) {
+    return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+// Add N days to a {year, month, day}, returning a new parts object.
+function addDays(parts, n) {
+    const d = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+    d.setUTCDate(d.getUTCDate() + n);
+    return {
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth() + 1,
+        day: d.getUTCDate(),
+    };
+}
+
+// Calendar week of month (1-5), matching the frontend's Math.ceil(day/7) scheme.
+function getWeekOfMonth({ day }) {
+    return Math.ceil(day / 7);
+}
+
+// Parse 'HH:MM' to total minutes since midnight.
+function timeToMinutes(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+}
+
+// Given an exception's original date, find the schedule that most likely
+// corresponds to it (matching day-of-week and week-of-month). Falls back to
+// the first active schedule if nothing matches.
+function findScheduleForOriginalDate(schedules, originalDateStr) {
+    const origParts = parseDateStr(originalDateStr);
+    if (origParts) {
+        const origDow = getDayOfWeek(origParts);
+        const origWeek = getWeekOfMonth(origParts);
+        const match = schedules.find(s => {
+            if (!s.active) return false;
+            if (s.day_of_week !== origDow) return false;
+            try {
+                const wp = JSON.parse(s.week_pattern);
+                return wp.includes(origWeek);
+            } catch {
+                return false;
+            }
+        });
+        if (match) return match;
+    }
+    return schedules.find(s => s.active) || null;
+}
+
+// Calculate the next sweeping date for a user, resolved in the user's
+// local timezone. Returns { dateStr, daysOut, schedule } or null.
+async function getNextSweepingDate(userId, timezone) {
     const schedules = await db.getSchedules(userId);
     const exceptions = await db.getExceptions(userId);
 
     if (schedules.length === 0) return null;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayParts = getLocalDateParts(timezone);
 
-    let closestDate = null;
-    let closestSchedule = null;
-
-    // Check next 90 days
     for (let i = 0; i < 90; i++) {
-        const checkDate = new Date(today);
-        checkDate.setDate(today.getDate() + i);
-        const dateStr = checkDate.toISOString().split('T')[0];
+        const checkParts = addDays(todayParts, i);
+        const dateStr = formatDateParts(checkParts);
 
-        // Check if this date is a moved-to date
+        // Moved-to date: sweeping happens here regardless of the regular pattern.
         const movedToThisDate = exceptions.find(ex => ex.moved_to_date === dateStr);
         if (movedToThisDate) {
-            const schedule = schedules.find(s => s.active);
-            if (schedule && (!closestDate || checkDate < closestDate)) {
-                closestDate = checkDate;
-                closestSchedule = schedule;
+            const schedule = findScheduleForOriginalDate(schedules, movedToThisDate.date);
+            if (schedule) {
+                return { dateStr, daysOut: i, schedule };
             }
             continue;
         }
 
-        // Check if this date is an exception (original date that was moved or cancelled)
-        const isException = exceptions.some(ex => ex.date === dateStr);
-        if (isException) continue;
+        // Original-date exception: sweeping on this day was cancelled or moved.
+        if (exceptions.some(ex => ex.date === dateStr)) continue;
 
-        // Check each schedule for regular sweeping days
+        const dow = getDayOfWeek(checkParts);
+        const weekOfMonth = getWeekOfMonth(checkParts);
+
         for (const schedule of schedules) {
             if (!schedule.active) continue;
+            if (dow !== schedule.day_of_week) continue;
 
-            // Check if day of week matches
-            if (checkDate.getDay() !== schedule.day_of_week) continue;
+            let weekPattern;
+            try {
+                weekPattern = JSON.parse(schedule.week_pattern);
+            } catch {
+                continue;
+            }
 
-            // Get week of month (1-5)
-            const weekOfMonth = Math.ceil(checkDate.getDate() / 7);
-
-            // Parse week pattern from JSON
-            const weekPattern = JSON.parse(schedule.week_pattern);
-
-            // Check if week pattern matches
             if (weekPattern.includes(weekOfMonth)) {
-                if (!closestDate || checkDate < closestDate) {
-                    closestDate = checkDate;
-                    closestSchedule = schedule;
-                }
+                return { dateStr, daysOut: i, schedule };
             }
         }
     }
 
-    return closestDate ? { date: closestDate, schedule: closestSchedule } : null;
+    return null;
 }
 
 // Send push notification to a user
@@ -87,145 +170,101 @@ async function sendPushNotification(subscription, payload) {
         return true;
     } catch (error) {
         console.error('Error sending push notification:', error);
-        // If subscription is invalid (410), you might want to remove it from database
-        if (error.statusCode === 410) {
+        if (error.statusCode === 410 || error.statusCode === 404) {
             console.log('Subscription expired, removing from database:', subscription.endpoint);
             await db.deletePushSubscription(subscription.endpoint);
         }
-
         return false;
     }
-}
-
-// Get the current calendar date (YYYY-MM-DD) in the user's local timezone
-function getLocalDateStr(timezone) {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone }).format(new Date());
 }
 
 // Format time for display
 function formatTime(time24) {
     const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours);
+    const hour = parseInt(hours, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
 }
 
+// Send a push payload to every subscription belonging to a user.
+async function sendToAllSubscriptions(userId, payload) {
+    const subscriptions = await db.getPushSubscriptions(userId);
+    for (const sub of subscriptions) {
+        const subscription = {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
+        };
+        await sendPushNotification(subscription, payload);
+    }
+}
+
 // Check and send notifications for all users
 async function checkAndSendNotifications() {
     const users = await db.getAllUsers();
-    const now = new Date();
-    const currentHour = now.getUTCHours();
-    const currentMinute = now.getUTCMinutes();
 
-    console.log(`Checking notifications at ${currentHour}:${currentMinute.toString().padStart(2, '0')} UTC`);
-
+    console.log(`Checking notifications at ${new Date().toISOString()}`);
     console.log(`Found ${users.length} users to check`);
 
     for (const user of users) {
         try {
-            const nextSweeping = await getNextSweepingDate(user.id);
+            const reminders = await db.getReminders(user.id);
+            const timezone = reminders.timezone || 'UTC';
+
+            const nextSweeping = await getNextSweepingDate(user.id, timezone);
             if (!nextSweeping) {
                 console.log(`User ${user.id}: No upcoming sweeping found`);
                 continue;
             }
 
-            const { date, schedule } = nextSweeping;
-            const reminders = await db.getReminders(user.id);
+            const { dateStr, daysOut, schedule } = nextSweeping;
 
-            console.log(`User ${user.id}: Next sweeping ${date.toISOString().split('T')[0]}, Reminders: night=${reminders.night_before}, morning=${reminders.morning_of}`);
+            const { hour: localHour, minute: localMinute } = getLocalTimeParts(timezone);
+            const nowMinutes = localHour * 60 + localMinute;
 
-            // Calculate days until sweeping using the user's local timezone
-            const userTimezone = reminders.timezone || 'UTC';
-            const todayStr = getLocalDateStr(userTimezone);
-            const sweepingStr = date.toISOString().split('T')[0];
-            const todayMs = new Date(todayStr + 'T00:00:00.000Z').getTime();
-            const sweepingMs = new Date(sweepingStr + 'T00:00:00.000Z').getTime();
-            const daysBefore = Math.round((sweepingMs - todayMs) / (1000 * 60 * 60 * 24));
+            console.log(
+                `User ${user.id}: tz=${timezone}, nextSweeping=${dateStr}, daysOut=${daysOut}, ` +
+                `localTime=${String(localHour).padStart(2, '0')}:${String(localMinute).padStart(2, '0')}, ` +
+                `night=${reminders.night_before}, morning=${reminders.morning_of}`
+            );
 
-            const dateStr = date.toISOString().split('T')[0];
-
-            console.log(`User ${user.id}: daysBefore=${daysBefore}, currentTime=${currentHour}:${currentMinute}`);
-
-            // Night before notification (if sweeping is tomorrow)
-            if (daysBefore === 1) {
-                const [nightHour, nightMinute] = reminders.night_before.split(':').map(Number);
-
-                console.log(`User ${user.id}: Checking night-before: need ${nightHour}:${nightMinute}, have ${currentHour}:${currentMinute}`);
-
-                if (currentHour === nightHour && currentMinute === nightMinute) {
-                    // Check if we already sent this notification
-                    if (!(await db.wasNotificationSent(user.id, 'night_before', dateStr))) {
-                        const subscriptions = await db.getPushSubscriptions(user.id);
-
-                        const payload = {
-                            title: 'Street Sweeping Tomorrow!',
-                            body: `Don't forget to move your car by ${formatTime(schedule.start_time)} tomorrow.`,
-                            icon: '/icons/streetSweeperAppIcon.png',
-                            vibrate: [200, 100, 200],
-                            tag: 'street-sweeping-reminder',
-                            requireInteraction: true,
-                            data: {
-                                url: '/',
-                                date: dateStr
-                            }
-                        };
-
-                        for (const sub of subscriptions) {
-                            const subscription = {
-                                endpoint: sub.endpoint,
-                                keys: {
-                                    p256dh: sub.p256dh,
-                                    auth: sub.auth
-                                }
-                            };
-
-                            await sendPushNotification(subscription, payload);
-                        }
-
-                        await db.logNotification(user.id, 'night_before', dateStr);
-                        console.log(`Sent night-before notification to user ${user.id}`);
-                    }
+            // Night-before notification (sweeping is tomorrow).
+            if (daysOut === 1) {
+                const schedMinutes = timeToMinutes(reminders.night_before);
+                if (nowMinutes >= schedMinutes &&
+                    !(await db.wasNotificationSent(user.id, 'night_before', dateStr))) {
+                    const payload = {
+                        title: 'Street Sweeping Tomorrow!',
+                        body: `Don't forget to move your car by ${formatTime(schedule.start_time)} tomorrow.`,
+                        icon: '/icons/streetSweeperAppIcon.png',
+                        vibrate: [200, 100, 200],
+                        tag: 'street-sweeping-reminder',
+                        requireInteraction: true,
+                        data: { url: '/', date: dateStr },
+                    };
+                    await sendToAllSubscriptions(user.id, payload);
+                    await db.logNotification(user.id, 'night_before', dateStr);
+                    console.log(`Sent night-before notification to user ${user.id}`);
                 }
             }
 
-            // Morning of notification (if sweeping is today)
-            if (daysBefore === 0) {
-                const [morningHour, morningMinute] = reminders.morning_of.split(':').map(Number);
-
-                if (currentHour === morningHour && currentMinute === morningMinute) {
-                    // Check if we already sent this notification
-                    if (!(await db.wasNotificationSent(user.id, 'morning_of', dateStr))) {
-                        const subscriptions = await db.getPushSubscriptions(user.id);
-
-                        const payload = {
-                            title: 'Street Sweeping Today!',
-                            body: `Move your car by ${formatTime(schedule.start_time)}. Sweeping: ${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
-                            icon: '/icons/streetSweeperAppIcon.png',
-                            vibrate: [200, 100, 200],
-                            tag: 'street-sweeping-reminder',
-                            requireInteraction: true,
-                            data: {
-                                url: '/',
-                                date: dateStr
-                            }
-                        };
-
-                        for (const sub of subscriptions) {
-                            const subscription = {
-                                endpoint: sub.endpoint,
-                                keys: {
-                                    p256dh: sub.p256dh,
-                                    auth: sub.auth
-                                }
-                            };
-
-                            await sendPushNotification(subscription, payload);
-                        }
-
-                        await db.logNotification(user.id, 'morning_of', dateStr);
-                        console.log(`Sent morning-of notification to user ${user.id}`);
-                    }
+            // Morning-of notification (sweeping is today).
+            if (daysOut === 0) {
+                const schedMinutes = timeToMinutes(reminders.morning_of);
+                if (nowMinutes >= schedMinutes &&
+                    !(await db.wasNotificationSent(user.id, 'morning_of', dateStr))) {
+                    const payload = {
+                        title: 'Street Sweeping Today!',
+                        body: `Move your car by ${formatTime(schedule.start_time)}. Sweeping: ${formatTime(schedule.start_time)} - ${formatTime(schedule.end_time)}`,
+                        icon: '/icons/streetSweeperAppIcon.png',
+                        vibrate: [200, 100, 200],
+                        tag: 'street-sweeping-reminder',
+                        requireInteraction: true,
+                        data: { url: '/', date: dateStr },
+                    };
+                    await sendToAllSubscriptions(user.id, payload);
+                    await db.logNotification(user.id, 'morning_of', dateStr);
+                    console.log(`Sent morning-of notification to user ${user.id}`);
                 }
             }
         } catch (error) {
@@ -252,5 +291,5 @@ function startScheduler() {
 module.exports = {
     startScheduler,
     initializeWebPush,
-    sendPushNotification
+    sendPushNotification,
 };
