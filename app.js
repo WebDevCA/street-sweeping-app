@@ -92,6 +92,21 @@ async function loadDataFromBackend() {
             const morningTime = document.getElementById('morningOfTime');
             if (nightTime) nightTime.value = state.reminders.nightBefore;
             if (morningTime) morningTime.value = state.reminders.morningOf;
+
+            // Auto-backfill the stored timezone if it's missing or differs from the
+            // browser's current timezone. This lets the backend scheduler fire
+            // notifications relative to the user's local time without waiting for
+            // them to manually click "Save" on the reminders form.
+            const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const storedTimezone = reminders.timezone;
+            if (localTimezone && localTimezone !== storedTimezone) {
+                try {
+                    await API.updateReminders(reminders.nightBefore, reminders.morningOf, localTimezone);
+                    console.log(`Timezone auto-updated from "${storedTimezone}" to "${localTimezone}"`);
+                } catch (tzError) {
+                    console.warn('Failed to auto-update timezone:', tzError);
+                }
+            }
         }
 
         // Save merged state to localStorage
