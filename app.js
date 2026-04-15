@@ -66,7 +66,7 @@ async function loadDataFromBackend() {
                 weekPattern: JSON.parse(s.week_pattern),
                 startTime: s.start_time,
                 endTime: s.end_time,
-                active: s.active === 1
+                active: !!s.active
             }));
         }
 
