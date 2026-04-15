@@ -158,7 +158,8 @@ app.get('/api/reminders', getUserMiddleware, async (req, res) => {
         const reminders = await db.getReminders(req.user.id);
         res.json({
             nightBefore: reminders.night_before,
-            morningOf: reminders.morning_of
+            morningOf: reminders.morning_of,
+            timezone: reminders.timezone
         });
     } catch (error) {
         console.error('Error getting reminders:', error);
