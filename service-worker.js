@@ -1,6 +1,6 @@
 // Service Worker for Street Sweeping Reminder App
 
-const CACHE_NAME = 'street-sweeping-v2';
+const CACHE_NAME = 'street-sweeping-v3';
 const urlsToCache = [
   '/',
   '/index.html',
