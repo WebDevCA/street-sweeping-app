@@ -218,14 +218,16 @@ async function checkAndSendNotifications() {
             }
 
             const { dateStr, daysOut, schedule } = nextSweeping;
-
-            const { hour: localHour, minute: localMinute } = getLocalTimeParts(timezone);
-            const nowMinutes = localHour * 60 + localMinute;
-
+            
+            // Reminder times are stored as UTC (the frontend converts local→UTC on save),
+            // so compare against current UTC time — not local time.
+            const now = new Date();
+            const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+            
             console.log(
                 `User ${user.id}: tz=${timezone}, nextSweeping=${dateStr}, daysOut=${daysOut}, ` +
-                `localTime=${String(localHour).padStart(2, '0')}:${String(localMinute).padStart(2, '0')}, ` +
-                `night=${reminders.night_before}, morning=${reminders.morning_of}`
+                `utcTime=${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}, ` +
+                `night=${reminders.night_before}utc, morning=${reminders.morning_of}utc`
             );
 
             // Night-before notification (sweeping is tomorrow).
