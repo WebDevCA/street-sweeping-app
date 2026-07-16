@@ -81,12 +81,11 @@ async function loadDataFromBackend() {
             }));
         }
 
-        // Load reminders (backend stores UTC, convert to local)
+        // Load reminders (backend stores the user's local wall-clock times)
         const reminders = await API.getReminders();
         if (reminders && reminders.nightBefore && reminders.morningOf) {
-            // Convert UTC times to local times for display
-            state.reminders.nightBefore = convertUTCTimeToLocal(reminders.nightBefore);
-            state.reminders.morningOf = convertUTCTimeToLocal(reminders.morningOf);
+            state.reminders.nightBefore = reminders.nightBefore;
+            state.reminders.morningOf = reminders.morningOf;
 
             const nightTime = document.getElementById('nightBeforeTime');
             const morningTime = document.getElementById('morningOfTime');
@@ -199,40 +198,19 @@ async function handleExceptionSubmit(e) {
     }
 }
 
-// Convert local time (HH:MM) to UTC time (HH:MM)
-function convertLocalTimeToUTC(localTime) {
-    const [hours, minutes] = localTime.split(':').map(Number);
-    const now = new Date();
-    const localDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
-    const utcHours = localDate.getUTCHours().toString().padStart(2, '0');
-    const utcMinutes = localDate.getUTCMinutes().toString().padStart(2, '0');
-    return `${utcHours}:${utcMinutes}`;
-}
-
-// Convert UTC time (HH:MM) to local time (HH:MM)
-function convertUTCTimeToLocal(utcTime) {
-    const [hours, minutes] = utcTime.split(':').map(Number);
-    const now = new Date();
-    const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hours, minutes));
-    const localHours = utcDate.getHours().toString().padStart(2, '0');
-    const localMinutes = utcDate.getMinutes().toString().padStart(2, '0');
-    return `${localHours}:${localMinutes}`;
-}
-
 // Handle reminder settings save
 async function handleRemindersSave() {
     const nightBefore = document.getElementById('nightBeforeTime').value;
     const morningOf = document.getElementById('morningOfTime').value;
 
     try {
-        // Convert to UTC before sending to backend
-        const nightBeforeUTC = convertLocalTimeToUTC(nightBefore);
-        const morningOfUTC = convertLocalTimeToUTC(morningOf);
+        // Send local wall-clock times as-is, along with the timezone. The backend
+        // scheduler compares them against the current time in that timezone, so
+        // no UTC conversion is needed (and none survives DST changes correctly).
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-        await API.updateReminders(nightBeforeUTC, morningOfUTC, timezone);
+        await API.updateReminders(nightBefore, morningOf, timezone);
 
-        // Store local times in state for display
         state.reminders.nightBefore = nightBefore;
         state.reminders.morningOf = morningOf;
         saveState();
@@ -350,6 +328,12 @@ function updateNextSweepingDisplay() {
     countdown.className = daysUntil <= 1 ? 'urgent' : '';
 }
 
+// Format a Date as 'YYYY-MM-DD' using its local calendar date. (toISOString
+// would give the UTC date, which can be off by one day in some timezones.)
+function toLocalDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getNextSweepingDate() {
     if (state.schedules.length === 0) return null;
     const today = new Date();
@@ -357,7 +341,7 @@ function getNextSweepingDate() {
     for (let i = 0; i < 90; i++) {
         const checkDate = new Date(today);
         checkDate.setDate(today.getDate() + i);
-        const dateStr = checkDate.toISOString().split('T')[0];
+        const dateStr = toLocalDateStr(checkDate);
         const movedTo = state.exceptions.find(ex => ex.movedToDate === dateStr);
         if (movedTo) return { date: checkDate, schedule: state.schedules.find(s => s.active) };
         if (state.exceptions.some(ex => ex.date === dateStr)) continue;
